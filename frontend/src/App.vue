@@ -1,90 +1,175 @@
 <script setup>
-import {createApp} from 'vue'
+import {onMounted, reactive, ref, watch} from 'vue'
+import draggable from 'vuedraggable'
 
-const app = createApp({
-    data() {
-        return {
-            task: {
-                title: ''
-            },
-            toDoTasks: [],
-            inProgressTasks: [],
-            doneTasks: [],
-            errors: {},
-        }
-    },
-    methods: {
-        store() {
-            const [vm, form] = [this, event.target]
-
-            fetch(form.getAttribute(form), {
-                method: 'POST',
-                body: new FormData(form)
-            })
-                .then((response) => response.json())
-                .then((result) => {
-                    vm.task.title = '';
-                    vm.errors = {};
-                    console.log('Success:', result)
-                })
-                .catch((error) => {
-                    console.error('Error:', error)
-                })
-        }
-    }
+const task = reactive({
+    title: ''
 })
-
 const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT
+let [
+    loading,
+    toDoTasks,
+    inProgressTasks,
+    doneTasks,
+    errors
+] = [
+    ref(true),
+    ref([]),
+    ref([]),
+    ref([]),
+    reactive({})
+]
+
+const index = () => {
+    fetch(`${API_ENDPOINT}/tasks`)
+        .then((response) => response.json())
+        .then((result) => {
+            toDoTasks.value = result.toDoTasks
+            inProgressTasks.value = result.inProgressTasks
+            doneTasks.value = result.doneTasks
+            loading.value = false
+        })
+        .catch((error) => {
+            console.error('Error:', error)
+            loading.value = false
+        })
+}
+
+const store = async () => {
+    loading.value = true
+    const form = event.target
+
+    await fetch(form.getAttribute('action'), {
+        method: 'POST',
+        body: new FormData(form)
+    })
+        .then((response) => response.json())
+        .then((result) => {
+            toDoTasks.value.push(result.data)
+            task.title = ''
+            errors = {}
+            console.log('Success:', result.msg)
+            loading.value = false
+        })
+        .catch((error) => {
+            errors = error?.errors;
+            console.error('Error:', error)
+            loading.value = false
+        })
+}
+
+const sort = (data) => {
+    fetch(`${API_ENDPOINT}/tasks/sort`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+    })
+        .then((response) => response.json())
+        .then((result) => {
+            console.log('Success:', result.msg)
+            loading.value = false
+        })
+        .catch((error) => {
+            console.error('Error:', error)
+            loading.value = false
+        })
+}
+
+watch(toDoTasks, async (currentValue, oldValue) => {
+    loading.value = true
+    currentValue.forEach(item => item.status = 'to_do')
+
+    await sort(currentValue)
+});
+
+watch(inProgressTasks, async (currentValue, oldValue) => {
+    loading.value = true
+    currentValue.forEach(item => item.status = 'in_progress')
+
+    await sort(currentValue)
+});
+
+watch(doneTasks, async (currentValue, oldValue) => {
+    loading.value = true
+    currentValue.forEach(item => item.status = 'done')
+
+    await sort(currentValue)
+});
+
+onMounted(async () => {
+    await index()
+})
 </script>
 
 <template>
     <main>
-        <div class="form-container">
-            <form :action="`${API_ENDPOINT}/tasks`"
-                  method="post"
-                  @submit.prevent="store"
-            >
-                <input type="text"
-                       name="title"
-                       placeholder="Write your task ..."
-                       class="input-box"
-                       required
+        <template v-if="loading">
+            <h1 class="container">Loading...</h1>
+        </template>
+        <template v-else>
+            <div class="form-container">
+                <form :action="`${API_ENDPOINT}/tasks`"
+                      method="post"
+                      @submit.prevent="store"
                 >
-<!--                <div class="error" v-if="errors.title">
-                    {{ errors.title }}
-                </div>-->
-
-                <button type="submit" class="submit-button">Add</button>
-            </form>
-        </div>
-
-        <div class="container">
-            <div class="card">
-                <div class="card-title">To Do</div>
-
-                <div class="card-body">
-                    <div class="task" v-for="toDoTask in toDoTasks">
-                        {{ toDoTask.title }}
+                    <input type="text"
+                           name="title"
+                           v-model="task.title"
+                           placeholder="Write your task ..."
+                           class="input-box"
+                           required
+                    >
+                    <div class="error" v-if="errors.title">
+                        {{ errors.title }}
                     </div>
-                </div>
+
+                    <button type="submit" class="submit-button">Add</button>
+                </form>
             </div>
 
-            <div class="card">
-                <div class="card-title">In Progress</div>
+            <div class="container">
+                <draggable
+                    class="card"
+                    v-model="toDoTasks"
+                    group="people"
+                    item-key="id">
+                    <template #header>
+                        <div class="card-title">To Do</div>
+                    </template>
+                    <template #item="{element}">
+                        <div class="task">{{ element.title }}</div>
+                    </template>
+                </draggable>
 
-                <div class="task" v-for="inProgressTask in inProgressTasks">
-                    {{ inProgressTask.title }}
-                </div>
+                <draggable
+                    class="card"
+                    v-model="inProgressTasks"
+                    group="people"
+                    item-key="id">
+                    <template #header>
+                        <div class="card-title">In Progress</div>
+                    </template>
+                    <template #item="{element}">
+                        <div class="task">{{ element.title }}</div>
+                    </template>
+                </draggable>
+
+                <draggable
+                    class="card"
+                    v-model="doneTasks"
+                    group="people"
+                    item-key="id">
+                    <template #header>
+                        <div class="card-title">Done</div>
+                    </template>
+                    <template #item="{element}">
+                        <div class="task">{{ element.title }}</div>
+                    </template>
+                </draggable>
             </div>
-
-            <div class="card">
-                <div class="card-title">Done</div>
-
-                <div class="task" v-for="doneTask in doneTasks">
-                    {{ doneTask.title }}
-                </div>
-            </div>
-        </div>
+        </template>
     </main>
 </template>
 
@@ -119,6 +204,8 @@ main {
     width: 200px;
     border: 1px solid black;
     margin-right: 20px;
+    height: 50vh;
+    overflow: auto;
 }
 
 .card-title {
@@ -127,11 +214,6 @@ main {
     background-color: rgb(255, 99, 71);
     text-align: center;
     border-bottom: 1px solid black;
-}
-
-.card-body {
-    height: 50vh;
-    overflow: auto;
 }
 
 .task {

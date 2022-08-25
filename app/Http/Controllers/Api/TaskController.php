@@ -36,7 +36,7 @@ class TaskController extends Controller
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function store(Request $request)
@@ -48,30 +48,32 @@ class TaskController extends Controller
         $data = $request->only('title');
         $data['sorting_order'] = Task::getSortingOrder();
 
-        Task::create($data);
+        $task = Task::create($data);
 
         return response()
-            ->json(['msg' => 'Task created successfully.']);
+            ->json([
+                'data' => $task,
+                'msg' => 'Task created successfully.',
+            ]);
     }
 
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \App\Models\Task  $task
+     * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function update(Request $request, Task $task)
+    public function sort(Request $request)
     {
-        $request->validate([
-            'status' => 'required|in:in_progress,done'
-        ]);
-
-        $task->update([
-            'status' => $request->status
-        ]);
+        foreach ($request->all() as $key => $item) {
+            Task::where('id', $item['id'])
+                ->update([
+                    'sorting_order' => $key + 1,
+                    'status' => $item['status'],
+                ]);
+        }
 
         return response()
-            ->json(['msg' => 'Task updated successfully.']);
+            ->json(['msg' => 'Tasks updated successfully.']);
     }
 }
